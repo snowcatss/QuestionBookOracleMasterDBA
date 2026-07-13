@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ORACLE MASTER Gold DBA 問題集（プロトタイプ v2）</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; }
+    .sticky-footer { padding-bottom: env(safe-area-inset-bottom); }
+    .code-block { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; }
+    [v-cloak] { display: none; }
+    .fade-enter-active, .fade-leave-active { transition: opacity .18s ease; }
+    .fade-enter-from, .fade-leave-to { opacity: 0; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen">
+  <div id="app" v-cloak class="pb-28">
+
+    <!-- =====================================================
+         1. ログイン画面
+    ====================================================== -->
+    <div v-if="view === 'login'" class="flex flex-col items-center justify-center min-h-screen p-4">
+      <div class="w-full max-w-md bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <h1 class="text-xl font-bold mb-1">ログイン</h1>
+        <p class="text-xs text-gray-400 mb-6">ORACLE MASTER Gold DBA 2019 問題集</p>
+
+        <label class="block text-sm text-gray-700 mb-1">ユーザ名 or Eメール</label>
+        <input type="text" placeholder="ユーザ名 or Eメールでログインしてください"
+               class="w-full border border-gray-300 rounded-lg p-2 text-sm mb-4 focus:outline-none focus:border-blue-500">
+
+        <label class="block text-sm text-gray-700 mb-1">パスワード</label>
+        <input type="password"
+               class="w-full border border-gray-300 rounded-lg p-2 text-sm mb-4 focus:outline-none focus:border-blue-500">
+
+        <label class="flex items-center mb-6 text-sm text-gray-700 select-none">
+          <input type="checkbox" checked class="mr-2"> ログインを記憶する
+        </label>
+
+        <button @click="go('top')"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg text-sm transition">
+          ログイン
+        </button>
+
+        <div class="mt-8 space-y-2 text-sm">
+          <a href="#" class="block text-blue-500 hover:underline">新規ユーザー登録はこちら</a>
+          <a href="#" class="block text-blue-500 hover:underline">パスワードを忘れた方はこちら</a>
+          <a href="#" class="block text-blue-500 hover:underline">確認メールを受け取っていませんか？</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- =====================================================
+         2. トップ画面（ダッシュボード）
+    ====================================================== -->
+    <div v-else-if="view === 'top'" class="max-w-3xl mx-auto bg-white min-h-screen shadow-sm">
+
+      <!-- 統計ヘッダー（未出題 + ミス + ヒット = 全問題数） -->
+      <div class="flex justify-between text-center p-4 border-b">
+        <div class="flex-1 border-b-4 border-gray-400 pb-2">
+          <div class="text-xs font-bold text-gray-500">未出題</div>
+          <div class="text-2xl font-bold text-gray-500">{{ stats.untried }}</div>
+        </div>
+        <div class="flex-1 border-b-4 border-red-500 pb-2">
+          <div class="text-xs font-bold text-red-500">ミス</div>
+          <div class="text-2xl font-bold text-red-500">{{ stats.miss }}</div>
+        </div>
+        <div class="flex-1 border-b-4 border-cyan-500 pb-2">
+          <div class="text-xs font-bold text-cyan-500">ヒット</div>
+          <div class="text-2xl font-bold text-cyan-500">{{ stats.hit }}</div>
+        </div>
+        <div class="flex-1 border-b-4 border-green-500 pb-2">
+          <div class="text-xs font-bold text-green-500">コンボ</div>
+          <div class="text-2xl font-bold text-green-500">{{ stats.combo }}</div>
+        </div>
+      </div>
+
+      <!-- レベル + スタンプシート -->
+      <div class="px-4">
+        <div class="flex justify-between items-center py-4">
+          <div class="text-lg font-bold">レベル
+            <span class="text-2xl text-cyan-500">{{ level }}</span>
+            <span class="text-sm text-cyan-500">/ 40</span>
+          </div>
+          <button @click="showStamps = !showStamps"
+                  class="text-blue-500 text-sm hover:underline flex items-center">
+            <span class="mr-1 inline-block transition" :class="showStamps ? 'rotate-180' : ''">▲</span> スタンプシート
+          </button>
+        </div>
+
+        <transition name="fade">
+          <div v-if="showStamps" class="pb-4">
+            <p class="text-sm text-gray-600 leading-relaxed mb-4">
+              レベルはいろんな条件を達成するごとに上がっていきます。<br>
+              達成した条件は以下のスタンプで確認できます。
+            </p>
+            <div class="space-y-3">
+              <div v-for="row in stampRows" :key="row.label" class="flex items-center">
+                <div class="w-24 shrink-0 flex items-baseline gap-2">
+                  <span class="font-bold text-sm">{{ row.label }}</span>
+                  <span class="text-red-500 text-xs font-bold">{{ row.metric }}</span>
+                </div>
+                <div class="flex gap-1.5 flex-wrap">
+                  <div v-for="n in 10" :key="n"
+                       class="w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold transition"
+                       :class="n <= row.filled
+                         ? 'bg-cyan-500 border-cyan-500 text-white'
+                         : 'bg-white border-gray-200 text-gray-300'">
+                    {{ row.char }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </transition>
+      </div>
+
+      <!-- 前回演習 -->
+      <div class="bg-gray-100 mx-4 p-4 rounded-xl text-center mb-6">
+        <p class="text-sm text-gray-600 mb-3">前回の演習： 自由演習 2026年07月21日(月) 06時22分</p>
+        <div class="flex justify-center gap-3">
+          <button @click="go('result')" class="bg-cyan-500 hover:bg-cyan-600 text-white px-4 py-2 rounded-full text-sm font-bold w-1/2 transition">演習結果</button>
+          <button @click="startPractice(true)" class="bg-cyan-500 hover:bg-cyan-600 text-white px-4 py-2 rounded-full text-sm font-bold w-1/2 transition">ミスに再挑戦</button>
+        </div>
+      </div>
+
+      <!-- モードタブ -->
+      <div class="flex border-b border-gray-200 px-4">
+        <button @click="mode='PRACTICE'"
+                class="px-5 py-2 text-sm font-bold border-b-2 -mb-px transition"
+                :class="mode==='PRACTICE' ? 'border-cyan-500 text-cyan-600' : 'border-transparent text-gray-400 hover:text-gray-600'">
+          自由演習
+        </button>
+        <button @click="mode='MOCK_EXAM'"
+                class="px-5 py-2 text-sm font-bold border-b-2 -mb-px transition"
+                :class="mode==='MOCK_EXAM' ? 'border-cyan-500 text-cyan-600' : 'border-transparent text-gray-400 hover:text-gray-600'">
+          模擬試験
+        </button>
+      </div>
+
+      <!-- 出題対象フィルタ -->
+      <div class="bg-gray-50 p-4 border-b">
+        <div class="flex items-center flex-wrap gap-x-4 gap-y-2 text-sm mb-3">
+          <span class="font-bold text-gray-700">出題対象</span>
+          <label class="flex items-center"><input type="checkbox" v-model="filters.untried" class="mr-1">未出題</label>
+          <label class="flex items-center"><input type="checkbox" v-model="filters.miss" class="mr-1">ミス</label>
+          <label class="flex items-center"><input type="checkbox" v-model="filters.hit" class="mr-1">ヒット</label>
+          <label class="flex items-center"><input type="checkbox" v-model="filters.combo" class="mr-1">コンボ</label>
+        </div>
+        <div class="text-sm text-blue-500 flex gap-2">
+          <a href="#" class="hover:underline">☆ お気に入りで絞る</a>
+          <span class="text-gray-300">/</span>
+          <a href="#" class="hover:underline">出題順を指定する</a>
+        </div>
+      </div>
+
+      <!-- 分野選択 -->
+      <div class="p-4">
+        <div class="flex gap-2 mb-3">
+          <button @click="selectAll(true)" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-xs font-bold transition">全分野選択</button>
+          <button @click="selectAll(false)" class="bg-gray-400 hover:bg-gray-500 text-white px-3 py-1 rounded text-xs font-bold transition">全分野解除</button>
+        </div>
+
+        <div class="border rounded-xl bg-white overflow-hidden text-sm">
+          <div class="bg-gray-50 border-b px-4 py-2 font-bold text-gray-700">
+            分野 <span class="text-gray-400 font-normal">（{{ totalQuestions }}問）</span>
+          </div>
+          <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label v-for="c in categories" :key="c.name"
+                   class="flex items-center text-gray-700 cursor-pointer"
+                   :class="c.count === 0 ? 'opacity-40' : ''">
+              <input type="checkbox" v-model="c.selected" :disabled="c.count === 0" class="mr-2">
+              {{ c.name }}
+              <span class="text-gray-400 ml-1 code-block">{{ c.count }}</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- ボトム固定ボタン -->
+      <div class="fixed bottom-0 left-0 w-full bg-white border-t p-4 flex justify-center sticky-footer">
+        <button @click="startPractice(false)" :disabled="selectedCount === 0"
+                class="w-full max-w-3xl py-3 rounded-full font-bold text-white transition"
+                :class="selectedCount === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-cyan-500 hover:bg-cyan-600'">
+          {{ selectedCount === 0 ? '分野を選択してください' : (mode==='MOCK_EXAM' ? '模擬試験を開始する' : '学習を開始する') + '（' + selectedCount + '分野選択中）' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- =====================================================
+         3. 問題演習画面
+    ====================================================== -->
+    <div v-else-if="view === 'question'" class="max-w-3xl mx-auto bg-white min-h-screen relative pb-28 shadow-sm">
+      <!-- ヘッダー -->
+      <div class="text-white flex items-center px-4 py-2 text-sm font-bold"
+           :class="mode==='MOCK_EXAM' ? 'bg-yellow-600' : 'bg-cyan-600'">
+        <div class="flex-1">
+          <template v-if="mode==='MOCK_EXAM'">残り時間 <span class="code-block">57:12</span></template>
+          <template v-else>自由演習</template>
+        </div>
+        <span class="mr-4 text-xs opacity-90">{{ qIndex + 1 }} / {{ questions.length }}</span>
+        <button @click="go('top')" class="hover:opacity-80">× 終わる</button>
+      </div>
+      <!-- 進捗バー -->
+      <div class="h-1 bg-gray-200">
+        <div class="h-1 bg-cyan-400 transition-all" :style="{ width: ((qIndex+1)/questions.length*100) + '%' }"></div>
+      </div>
+
+      <div class="p-6">
+        <!-- メタデータ -->
+        <div class="mb-6">
+          <div class="text-gray-700 font-bold mb-2">問題ID ： <span class="text-lg code-block">{{ q.id }}</span>
+            <span class="ml-2 text-xs font-normal px-2 py-0.5 rounded-full"
+                  :class="q.type==='MULTIPLE' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'">
+              {{ q.type==='MULTIPLE' ? '複数選択' : '単一選択' }}
+            </span>
+          </div>
+          <div class="bg-gray-100 p-3 rounded-lg text-sm text-gray-600">
+            <div class="flex items-center mb-1">
+              <span class="w-12">履歴</span>
+              <span v-for="(h,i) in q.history" :key="i"
+                    class="mx-1 font-bold" :class="h==='×' ? 'text-red-500' : (h==='○' ? 'text-cyan-500' : '')">{{ h }}</span>
+            </div>
+            <div>前回出題日時 ： {{ q.lastDate }}</div>
+          </div>
+        </div>
+
+        <!-- 設問 -->
+        <div class="text-gray-800 leading-relaxed mb-6">
+          <p class="mb-4">{{ q.text }}</p>
+          <div v-if="q.sql" class="code-block bg-gray-50 border p-4 rounded-lg text-sm overflow-x-auto whitespace-pre">{{ q.sql }}</div>
+          <!-- 添付画像（あれば） -->
+          <div v-if="q.image" class="mt-4">
+            <img :src="q.image" alt="設問画像"
+                 class="max-h-40 rounded-lg border cursor-zoom-in hover:opacity-90"
+                 @click="alert('画像を拡大表示（本実装ではモーダル）')">
+          </div>
+        </div>
+
+        <!-- 選択肢：SINGLE=ラジオ / MULTIPLE=チェックボックス -->
+        <div class="space-y-2 mb-8">
+          <label v-for="ch in q.choices" :key="ch.id"
+                 class="flex items-start p-2.5 rounded-lg cursor-pointer border transition"
+                 :class="choiceClass(ch)">
+            <input :type="q.type==='MULTIPLE' ? 'checkbox' : 'radio'"
+                   :name="'q'+q.id"
+                   class="mt-1 mr-3"
+                   :checked="isSelected(ch.id)"
+                   @change="toggleChoice(ch.id)">
+            <span class="text-gray-700">{{ ch.text }}</span>
+            <span v-if="revealed && ch.correct" class="ml-auto text-cyan-500 font-bold">正解</span>
+          </label>
+        </div>
+
+        <!-- ナビゲーション -->
+        <div class="flex gap-3 mb-6">
+          <button @click="prevQ" :disabled="qIndex===0"
+                  class="px-6 py-2 rounded-lg font-bold text-sm w-28 text-white transition"
+                  :class="qIndex===0 ? 'bg-gray-300' : 'bg-cyan-500 hover:bg-cyan-600'">← もどる</button>
+          <button @click="nextQ"
+                  class="px-6 py-2 rounded-lg font-bold text-sm w-28 text-white bg-cyan-500 hover:bg-cyan-600 transition">
+            {{ qIndex === questions.length-1 ? '結果へ →' : 'すすむ →' }}
+          </button>
+        </div>
+
+        <!-- 正解・参考（自由演習のみ。フロントで判定して即時表示） -->
+        <div v-if="mode==='PRACTICE'" class="space-y-3 border-t pt-6">
+          <button @click="reveal()"
+                  class="text-white px-6 py-2 rounded-lg font-bold text-sm w-28 bg-gray-500 hover:bg-gray-600 transition">
+            {{ revealed ? '− 閉じる' : '＋ 正解' }}
+          </button>
+
+          <transition name="fade">
+            <div v-if="revealed" class="mt-4 p-4 rounded-lg border"
+                 :class="lastCorrect ? 'bg-cyan-50 border-cyan-200' : 'bg-red-50 border-red-200'">
+              <div class="flex items-center gap-2 mb-3">
+                <span class="text-lg font-bold" :class="lastCorrect ? 'text-cyan-600' : 'text-red-500'">
+                  {{ lastCorrect ? '○ 正解' : '× 不正解' }}
+                </span>
+              </div>
+              <h3 class="font-bold text-gray-700 mb-1 text-sm">正解</h3>
+              <p class="text-sm text-gray-700 mb-4">
+                <span v-for="ch in q.choices.filter(c=>c.correct)" :key="ch.id" class="block">・{{ ch.text }}</span>
+              </p>
+              <h3 class="font-bold text-gray-700 mb-1 text-sm">解説</h3>
+              <p class="text-sm text-gray-700 leading-relaxed">{{ q.explanation }}</p>
+            </div>
+          </transition>
+        </div>
+      </div>
+
+      <!-- ボトム固定バー -->
+      <div class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-3xl bg-white border-t p-3 flex justify-between items-center sticky-footer">
+        <button @click="prevQ" :disabled="qIndex===0"
+                class="w-14 h-14 rounded-lg flex flex-col justify-center items-center text-white transition"
+                :class="qIndex===0 ? 'bg-gray-300' : 'bg-cyan-500 hover:bg-cyan-600'">
+          <span class="font-bold">←</span><span class="text-xs">もどる</span>
+        </button>
+        <div class="flex gap-2">
+          <button @click="memoOpen = true"
+                  class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full text-sm flex items-center hover:bg-gray-50 transition">
+            <span class="mr-1">✎</span> メモ<span v-if="q.memo" class="ml-1 w-2 h-2 rounded-full bg-cyan-500 inline-block"></span>
+          </button>
+          <button @click="q.favorite = !q.favorite"
+                  class="border px-4 py-2 rounded-full text-sm flex items-center transition"
+                  :class="q.favorite ? 'border-yellow-400 text-yellow-500 bg-yellow-50' : 'border-gray-300 text-gray-600 hover:bg-gray-50'">
+            <span class="mr-1">{{ q.favorite ? '★' : '☆' }}</span> お気に入り
+          </button>
+        </div>
+        <button @click="nextQ"
+                class="w-14 h-14 rounded-lg flex flex-col justify-center items-center text-white bg-cyan-500 hover:bg-cyan-600 transition">
+          <span class="font-bold">→</span><span class="text-xs">すすむ</span>
+        </button>
+      </div>
+
+      <!-- メモモーダル -->
+      <div v-if="memoOpen" class="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 p-4" @click.self="memoOpen=false">
+        <div class="bg-white w-full max-w-md rounded-xl p-5">
+          <h3 class="font-bold mb-3">メモ（問題ID {{ q.id }}）</h3>
+          <textarea v-model="q.memo" rows="4" placeholder="この問題の覚え書き…"
+                    class="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:border-cyan-500"></textarea>
+          <div class="flex justify-end gap-2 mt-3">
+            <button @click="memoOpen=false" class="px-4 py-2 text-sm text-gray-500">閉じる</button>
+            <button @click="memoOpen=false" class="px-4 py-2 text-sm text-white bg-cyan-500 hover:bg-cyan-600 rounded-lg font-bold transition">保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =====================================================
+         4. 演習結果画面
+    ====================================================== -->
+    <div v-else-if="view === 'result'" class="max-w-3xl mx-auto bg-white min-h-screen relative pb-28 shadow-sm">
+      <div class="text-center py-4 border-b font-bold text-gray-700 bg-gray-50">演習結果</div>
+
+      <div class="p-6">
+        <div class="text-center text-lg mb-8">
+          正解は <span class="text-2xl font-bold text-cyan-500">{{ resultCorrect }}</span>
+          <span class="font-bold">/ {{ resultRows.length }}</span>　
+          正答率 <span class="text-2xl font-bold text-cyan-500">{{ Math.round(resultCorrect / resultRows.length * 100) }}%</span> でした
+        </div>
+
+        <div class="overflow-x-auto text-sm border-t border-gray-200">
+          <table class="w-full text-left">
+            <thead>
+              <tr class="bg-gray-100 border-b text-gray-700">
+                <th class="p-3 w-12 text-center">連番</th>
+                <th class="p-3 w-12 text-center">正誤</th>
+                <th class="p-3 w-20">ID</th>
+                <th class="p-3">設問</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(r,i) in resultRows" :key="r.id"
+                  class="border-b hover:bg-gray-50 cursor-pointer" @click="openQuestionFromResult(r.id)">
+                <td class="p-3 text-center">{{ i+1 }}</td>
+                <td class="p-3 text-center font-bold" :class="r.correct ? 'text-cyan-500' : 'text-red-500'">
+                  {{ r.correct ? '○' : '×' }}
+                </td>
+                <td class="p-3 text-blue-500 code-block">{{ r.id }}</td>
+                <td class="p-3 text-gray-700 truncate max-w-[16rem]">{{ r.preview }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-3xl bg-white border-t p-4 flex justify-center gap-3 sticky-footer">
+        <button @click="go('top')" class="bg-gray-500 hover:bg-gray-600 text-white w-1/2 py-3 rounded-full font-bold text-sm transition">← 学習履歴へ</button>
+        <button @click="startPractice(true)" class="bg-cyan-500 hover:bg-cyan-600 text-white w-1/2 py-3 rounded-full font-bold text-sm transition">ミスに再挑戦</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const { createApp, ref, reactive, computed } = Vue;
+
+    createApp({
+      setup() {
+        const view = ref('login');
+        const showStamps = ref(true);
+        const mode = ref('PRACTICE');
+        const memoOpen = ref(false);
+
+        // ---- モックデータ（企画書の検算値に一致：未出題283 + ミス27 + ヒット276 = 586 = N）----
+        const totalQuestions = 586;
+        const stats = reactive({ untried: 283, miss: 27, hit: 276, combo: 0 });
+
+        // 模試スタンプの達成回数（モック）
+        const mock80 = 0, mock90 = 0;
+
+        // ---- レベル・スタンプ算出（企画書 4-3 の定義そのまま）----
+        const hitPct = computed(() => totalQuestions ? stats.hit / totalQuestions * 100 : 0);
+        const comboPct = computed(() => totalQuestions ? stats.combo / totalQuestions * 100 : 0);
+        const clampStamp = (v) => Math.min(Math.floor(v), 10);
+
+        const hitStamps = computed(() => clampStamp(hitPct.value / 10));
+        const comboStamps = computed(() => clampStamp(comboPct.value / 10));
+        const mock80Stamps = computed(() => Math.min(mock80, 10));
+        const mock90Stamps = computed(() => Math.min(mock90, 10));
+        const level = computed(() => hitStamps.value + comboStamps.value + mock80Stamps.value + mock90Stamps.value);
+
+        const stampRows = computed(() => [
+          { label: 'ヒット', char: 'ヒ', metric: hitPct.value.toFixed(0) + '%',  filled: hitStamps.value },
+          { label: 'コンボ', char: 'コ', metric: comboPct.value.toFixed(0) + '%', filled: comboStamps.value },
+          { label: '模試 80%', char: '模', metric: mock80 + '回', filled: mock80Stamps.value },
+          { label: '模試 90%', char: '模', metric: mock90 + '回', filled: mock90Stamps.value },
+        ]);
+
+        // ---- カテゴリ（親=資格 / 子=分野。件数0は非活性）----
+        const categories = reactive([
+          { name: 'リレーショナル・データベース', count: 0,  selected: false },
+          { name: 'Select文',                    count: 0,  selected: false },
+          { name: 'データの制限およびソート',       count: 47, selected: true },
+          { name: '単一行関数',                    count: 0,  selected: false },
+          { name: '変換関数および条件式',           count: 50, selected: true },
+          { name: 'DML文',                         count: 52, selected: false },
+          { name: 'DDL文',                         count: 70, selected: true },
+        ]);
+        const selectedCount = computed(() => categories.filter(c => c.selected && c.count > 0).length);
+        const selectAll = (v) => categories.forEach(c => { if (c.count > 0) c.selected = v; });
+
+        const filters = reactive({ untried: true, miss: true, hit: false, combo: false });
+
+        // ---- 問題（SINGLE / MULTIPLE の両方を用意）----
+        const questions = reactive([
+          {
+            id: 26936, type: 'MULTIPLE', category: 'DDL文',
+            text: '次のSQL文で索引を作成しました。この索引の説明として正しいものはどれですか（2つ選択して下さい）。',
+            sql: 'CREATE INDEX ind_price\n  ON new_products(list_price) INVISIBLE;',
+            history: ['×','—','—','—','—'], lastDate: '2026年07月21日(月) 06時22分',
+            choices: [
+              { id: 'a', text: 'ユーザーからは見えない索引である', correct: false },
+              { id: 'b', text: '表にDML文を実行してもメンテナンスされない', correct: false },
+              { id: 'c', text: '不可視索引である', correct: true },
+              { id: 'd', text: 'デフォルトでは使用されない索引である', correct: true },
+              { id: 'e', text: '降順索引である', correct: false },
+            ],
+            explanation: 'INVISIBLE句を指定することで不可視索引を作成できます。不可視索引はオプティマイザのデフォルト動作では実行計画に使用されませんが、DML操作時のメンテナンスは通常通り行われます。',
+            favorite: false, memo: '',
+          },
+          {
+            id: 26590, type: 'SINGLE', category: 'DML文',
+            text: 'ユーザーAがCUSTOMERS表を所有しています。TRUNCATE TABLE を実行した場合の説明として正しいものはどれですか。',
+            sql: 'TRUNCATE TABLE customers;',
+            history: ['—','—','—','—','—'], lastDate: '—',
+            choices: [
+              { id: 'a', text: 'ROLLBACKで元に戻せる', correct: false },
+              { id: 'b', text: '表の定義は残り、全行が即座に削除される', correct: true },
+              { id: 'c', text: 'WHERE句で条件を指定できる', correct: false },
+              { id: 'd', text: '表そのものが削除される', correct: false },
+            ],
+            explanation: 'TRUNCATEはDDLであり自動コミットされるためROLLBACKできません。表定義は残したまま全行を高速に削除します。',
+            favorite: false, memo: '',
+          },
+          {
+            id: 26587, type: 'SINGLE', category: 'DDL文',
+            text: '索引の作成に関する説明として、正しいものはどれですか。',
+            sql: '',
+            history: ['○','—','—','—','—'], lastDate: '2026年07月20日(日) 21時05分',
+            choices: [
+              { id: 'a', text: '主キー制約を作成すると一意索引が自動生成される', correct: true },
+              { id: 'b', text: '1つの表に索引は1つしか作成できない', correct: false },
+              { id: 'c', text: '外部キー制約は自動的に索引を作成する', correct: false },
+            ],
+            explanation: 'PRIMARY KEYまたはUNIQUE制約を作成すると、対応する一意索引が自動的に作成されます。外部キーには索引は自動生成されません。',
+            favorite: false, memo: '',
+          },
+        ]);
+
+        const qIndex = ref(0);
+        const q = computed(() => questions[qIndex.value]);
+        const selections = reactive({}); // { questionId: [choiceId,...] }
+        const revealed = ref(false);
+        const lastCorrect = ref(false);
+
+        const isSelected = (cid) => (selections[q.value.id] || []).includes(cid);
+        const toggleChoice = (cid) => {
+          const qid = q.value.id;
+          if (!selections[qid]) selections[qid] = [];
+          if (q.value.type === 'SINGLE') {
+            selections[qid] = [cid];
+          } else {
+            const arr = selections[qid];
+            const i = arr.indexOf(cid);
+            i >= 0 ? arr.splice(i, 1) : arr.push(cid);
+          }
+        };
+
+        // 完全一致判定（企画書 5-1：選択集合 = 正解集合）
+        const judge = () => {
+          const sel = [...(selections[q.value.id] || [])].sort();
+          const cor = q.value.choices.filter(c => c.correct).map(c => c.id).sort();
+          return sel.length === cor.length && sel.every((v, i) => v === cor[i]);
+        };
+        const reveal = () => {
+          if (revealed.value) { revealed.value = false; return; }
+          lastCorrect.value = judge();
+          revealed.value = true;
+        };
+
+        const choiceClass = (ch) => {
+          if (!revealed.value) return isSelected(ch.id) ? 'border-cyan-400 bg-cyan-50' : 'border-transparent hover:bg-gray-50';
+          if (ch.correct) return 'border-cyan-400 bg-cyan-50';
+          if (isSelected(ch.id) && !ch.correct) return 'border-red-300 bg-red-50';
+          return 'border-transparent';
+        };
+
+        const nextQ = () => {
+          if (qIndex.value === questions.length - 1) { go('result'); return; }
+          qIndex.value++; revealed.value = false;
+        };
+        const prevQ = () => { if (qIndex.value > 0) { qIndex.value--; revealed.value = false; } };
+
+        // ---- 結果画面 ----
+        const resultRows = computed(() => questions.map(qq => {
+          const sel = [...(selections[qq.id] || [])].sort();
+          const cor = qq.choices.filter(c => c.correct).map(c => c.id).sort();
+          const correct = sel.length === cor.length && sel.every((v, i) => v === cor[i]);
+          return { id: qq.id, correct, preview: qq.text.slice(0, 40) + '…' };
+        }));
+        const resultCorrect = computed(() => resultRows.value.filter(r => r.correct).length);
+        const openQuestionFromResult = (id) => {
+          const i = questions.findIndex(x => x.id === id);
+          if (i >= 0) { qIndex.value = i; revealed.value = false; go('question'); }
+        };
+
+        // ---- 画面遷移 ----
+        const go = (v) => { view.value = v; window.scrollTo(0, 0); };
+        const startPractice = (missOnly) => {
+          qIndex.value = 0; revealed.value = false;
+          go('question');
+        };
+
+        return {
+          view, go, showStamps, mode, memoOpen,
+          totalQuestions, stats, level, stampRows,
+          categories, selectedCount, selectAll, filters,
+          questions, qIndex, q, revealed, lastCorrect,
+          isSelected, toggleChoice, reveal, choiceClass, nextQ, prevQ,
+          resultRows, resultCorrect, openQuestionFromResult, startPractice,
+          alert: window.alert,
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

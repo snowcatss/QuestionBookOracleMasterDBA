@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+body {
+  font-family:
+    'Helvetica Neue',
+    Arial,
+    'Hiragino Kaku Gothic ProN',
+    'Hiragino Sans',
+    Meiryo,
+    sans-serif;
+}
+
+.code-block {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+.sticky-footer {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.18s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
